@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sky Climb</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #7fc8ff; }
+  body { font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #fff; user-select: none; -webkit-user-select: none; }
+  canvas { display: block; width: 100vw; height: 100vh; height: 100dvh; touch-action: none; }
+  .hud { position: fixed; pointer-events: none; text-shadow: 0 2px 4px #0009; }
+  #height { top: max(10px, env(safe-area-inset-top)); left: max(14px, env(safe-area-inset-left)); font: 900 34px/1 system-ui, sans-serif; }
+  #height small { display: block; margin-top: 4px; font-size: 13px; font-weight: 700; opacity: .92; }
+  #top { top: max(10px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); font-size: 13px; font-weight: 700; min-width: 130px; }
+  #top div { display: flex; justify-content: space-between; gap: 10px; } #top .me { color: #ffe14d; } #top .head { opacity: .8; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  #feed { top: calc(max(10px, env(safe-area-inset-top)) + 112px); left: max(14px, env(safe-area-inset-left)); font-size: 13px; font-weight: 700; max-width: 60vw; }
+  #feed div { transition: opacity .6s; }
+  #hint { left: 50%; top: 34%; transform: translateX(-50%); width: min(460px, 84vw); text-align: center; font-size: 16px; font-weight: 700; padding: 10px 14px; border-radius: 14px; background: #0005; box-sizing: border-box; }
+  #hint:empty { display: none; }
+  #msg { top: 24%; left: 0; right: 0; text-align: center; font: 900 46px/1.05 system-ui, sans-serif; color: #ffe14d; -webkit-text-stroke: 2px #5a3000; transition: opacity .35s, transform .35s; opacity: 0; transform: scale(.85); }
+  #msg small { display: block; font-size: 20px; color: #fff; -webkit-text-stroke: 0; margin-top: 6px; }
+  #msg.on { opacity: 1; transform: scale(1); }
+  #net { bottom: max(6px, env(safe-area-inset-bottom)); left: 0; right: 0; text-align: center; font-size: 12px; opacity: .85; }
+  #trophy { position: fixed; top: calc(max(10px, env(safe-area-inset-top)) + 62px); left: max(14px, env(safe-area-inset-left)); height: 44px; padding: 0 14px; border-radius: 22px; border: 2px solid #ffffff88; background: #00000033; color: #fff; font: 800 14px system-ui, sans-serif; cursor: pointer; }
+  #over { position: fixed; inset: 0; display: grid; place-items: center; background: #0a1a3088; }
+  #over[hidden], .pad[hidden], #trophy[hidden] { display: none; }
+  .card { width: min(360px, 90vw); max-height: 86vh; overflow: auto; padding: 20px; border-radius: 16px; background: #1b2347f2; border: 1px solid #ffffff2a; text-align: center; box-sizing: border-box; }
+  .card h2 { margin: 0 0 4px; font-size: 26px; color: #ffe14d; }
+  .card h3 { margin: 14px 0 4px; font-size: 13px; color: #9fd8ff; text-align: left; }
+  .card ol { margin: 0; padding-left: 24px; font-size: 14px; text-align: left; } .card li span { float: right; font-variant-numeric: tabular-nums; }
+  .row { display: flex; gap: 10px; margin-top: 16px; }
+  button.go { flex: 1; min-height: 48px; border: 0; border-radius: 12px; background: #3ddc84; color: #06240f; font: 800 16px system-ui, sans-serif; cursor: pointer; }
+  button.go.alt { background: #ffffff22; color: #fff; }
+  .pad { position: fixed; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 14px); display: flex; gap: 12px; touch-action: none; }
+  .pad button { width: 76px; height: 76px; border-radius: 50%; border: 2px solid #ffffff88; background: #00000030; color: #fff; font: 800 18px system-ui, sans-serif; touch-action: none; }
+  .pad button.on { background: #ffffff55; }
+  #padL { left: max(14px, env(safe-area-inset-left)); } #padR { right: max(14px, env(safe-area-inset-right)); }
+  #padR button { width: 96px; height: 96px; background: #3ddc8455; }
+  @media (max-width: 560px) { #top { font-size: 12px; min-width: 110px; } #top div:nth-child(n+6) { display: none; } #msg { font-size: 38px; } }
+</style>
+<script src="https://cdn.multiplayeragent.com/sdk/mp.global.js"></script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div class="hud" id="height"></div>
+<div class="hud" id="top"></div>
+<div class="hud" id="feed"></div>
+<div class="hud" id="hint"></div>
+<div class="hud" id="msg"></div>
+<div class="hud" id="net">Connecting…</div>
+<button id="trophy" hidden>🏆 Best climbs</button>
+<div class="pad" id="padL" hidden><button data-k="left">◀</button><button data-k="right">▶</button></div>
+<div class="pad" id="padR" hidden><button data-k="jump">JUMP</button></div>
+<div id="over" hidden><div class="card">
+  <h2>Best climbs</h2>
+  <div id="mine"></div>
+  <h3>Highest anyone has climbed</h3><ol id="board"><li>Loading…</li></ol>
+  <div class="row"><button class="go alt" id="restart">Start over</button><button class="go" id="resume">Keep climbing</button></div>
+</div></div>
+<script>
+/* ═══ SKY CLIMB · a Multiplayer Agent starter ═══════════════════════════════════════════
+ * Charge your jumps and climb an endless tower. Miss, and you fall. Drop-in, 2–20 players.
+ *
+ * WHERE THINGS ARE (search for the "── " headers):
+ *   CONFIG ........ jumps, the tower seed, bots, how high the rest ledges are
+ *   ZONES ......... the tower's look as you climb: Meadow, Treetops, Cloud Sea, Sky Islands, Starfield
+ *   CONNECTION .... MP_CONNECT, joining, the offline room, who is host, the shared clock
+ *   TOWER ......... builds the tower level by level from CONFIG.seed (the same for everyone)
+ *   CLIMBERS ...... one physics step for anyone (you or a bot): walk, charge, leap, land, fall
+ *   BOTS (HOST) ... the bot brain: it tries jumps in its head, then sometimes fumbles one
+ *   ME ............ your climber, falls, milestones, the leaderboard. Each player writes only its own.
+ *   DRAW .......... sky, tower walls, platforms, climbers, the charge ring, particles
+ *   HUD & CARD .... height, who's highest, the fall feed, the best-climbs card
+ *   INPUT ......... keyboard, and touch buttons
+ *
+ * HOW THE MULTIPLAYER WORKS (a relay room: no server code):
+ *   - Everyone builds the same tower from CONFIG.seed, so the tower itself is never sent.
+ *     Sliding platforms move on the SHARED CLOCK: the host writes `clk` every 2 seconds,
+ *     everyone else keeps the offset, and a platform's spot is a function of the time.
+ *   - Each player writes its OWN entity: `p` (one JSON field: position, speed, facing,
+ *     animation, charge) about 12 times a second, `hb` (heartbeat) once a second, and
+ *     `n`/`c` (name, color) once.
+ *   - The HOST is the lowest sessionId among live players (heartbeat seen in the last 3s),
+ *     worked out every frame. Only the host writes `clk` and `bots` (the bot climbers,
+ *     ~10/s). A new host adopts the bots where state has them and keeps the same clock.
+ *   - Events (effects only): "fell" {m, n} when someone falls a long way, "up" {m, n} when
+ *     someone passes a rest ledge. Both show in the feed.
+ *   - ?attract plays offline with bots only (the preview video is recorded from it).
+ *   - Leaderboard "best-height": each player's highest climb in meters, on the 🏆 card.
+ */
+
+// ── CONFIG ──────────────────────────────────────────────────────────────────────────
+const CONFIG = {
+  seed: 20261109,        // the tower: change it and everyone climbs a different one
+  seats: 6,              // bots fill the tower up to this many climbers
+  walk: 5,               // walking speed on a platform, tiles/s (1 tile = 1 meter)
+  airSpeed: 4.6,         // sideways speed of a jump, tiles/s
+  airControl: 3,         // how much you can steer in the air (a little: gentler than none)
+  gravity: 40, maxFall: 22,
+  chargeTime: 0.6,       // seconds to charge a full jump
+  minJump: 1.3,          // jump height from a quick tap, tiles
+  maxJump: 5.2,          // jump height fully charged, tiles
+  springJump: 7.5,       // a spring pad throws you this high
+  iceGrip: 2.5,          // how fast you speed up or stop on ice (normal ground: 22)
+  wallBounce: 0.55,      // share of your speed you keep when you bounce off the tower wall
+  restEvery: 50,         // a wide rest ledge every this many meters: you never fall below the last one
+  hardAt: 90,            // levels until platforms are as small and far apart as they get
+  bigFall: 10,           // meters: falls this long go in the feed
+  botSlip: 0.12,         // chance a bot misjudges a jump
+  botLeash: 30,          // meters: a bot this far from every player is brought back near one
+  sendMs: 80,            // how often your climber is sent (~12/s)
+  board: "best-height",  // leaderboard: highest climb, in meters
+};
+const BOT_NAMES = ["Hopper", "Pip", "Boing", "Skye", "Ziggy", "Pogo", "Nimbus", "Sprout", "Kite", "Tofu"];
+const COLORS = ["#ff5a5f", "#3d8bff", "#ffb627", "#2fbf71", "#a463f2", "#ff7ac6", "#13c4c4", "#ff8a3d", "#8bd450", "#6b7cff", "#e879f9", "#facc15"];
+
+// ── ZONES ───────────────────────────────────────────────────────────────────────────
+// The tower changes look every 50 m. sky = [top, bottom] colors; plat/top = platform body and its top edge.
+const ZONES = [
+  { from: 0,   name: "Meadow",      sky: ["#6dbdf7", "#d6f1ff"], plat: "#8f5b37", top: "#5fcf5f", wall: "#b9a58a" },
+  { from: 50,  name: "Treetops",    sky: ["#4aa6e8", "#bfe9c8"], plat: "#6b4426", top: "#3fae4f", wall: "#8a7a5e" },
+  { from: 100, name: "Cloud Sea",   sky: ["#ff8fa8", "#ffe2c4"], plat: "#ffffff", top: "#ffffff", wall: "#e7c9d6", cloud: true },
+  { from: 150, name: "Sky Islands", sky: ["#3557c9", "#a2c6ff"], plat: "#7c6a8a", top: "#9be37a", wall: "#8d8fb8" },
+  { from: 200, name: "Starfield",   sky: ["#070a24", "#2a2766"], plat: "#46558a", top: "#8fd3ff", wall: "#3a3f6e", stars: true },
+];
+const zoneAt = (m) => { let z = ZONES[0]; for (const q of ZONES) if (m >= q.from) z = q; return z; };
+
+// ── CONNECTION ──────────────────────────────────────────────────────────────────────
+// The builder fills these in for this game. Downloaded from GitHub? Put your own pk_ key here.
+const MP_CONNECT = {
+  key: 'pk_REPLACE_ME',
+  room: 'sky-climb',
+  endpoint: 'wss://live.multiplayeragent.com',
+  apiUrl: 'https://api.multiplayeragent.com',
+};
+const ATTRACT = new URLSearchParams(location.search).has("attract");
+
+/** Same shape as the SDK client, kept in this tab: offline play and ?attract. */
+function localRoom() {
+  const id = "local", state = { entities: { players: { [id]: {} } }, shared: {} }, subs = [];
+  let queued = false;
+  const emit = () => { if (!queued) { queued = true; queueMicrotask(() => { queued = false; subs.forEach((f) => f(state)); }); } };
+  const put = (o, k, v) => { if (typeof k === "object") Object.assign(o, k); else o[k] = v; emit(); };
+  return {
+    sessionId: id, state, offline: true,
+    me: { set: (k, v) => put(state.entities.players[id], k, v) },
+    setShared: (k, v) => put(state.shared, k, v),
+    onState: (f) => { subs.push(f); f(state); }, onJoin() {}, onLeave() {}, on() {}, send() {},
+    onDisconnect() {}, onReconnect() {}, leave: async () => {},
+  };
+}
+async function connect() {
+  if (ATTRACT || typeof MP === "undefined") return localRoom();
+  try {
+    const mp = await Promise.race([MP.join({ ...MP_CONNECT }), new Promise((_, no) => setTimeout(() => no(new Error("timed out")), 10000))]);
+    window.mp = mp; // the builder calls window.mp.leave() when the page closes
+    return mp;
+  } catch (e) {
+    console.warn("Playing offline:", e && e.message);
+    return localRoom();
+  }
+}
+const parse = (v, fb) => { if (typeof v !== "string") return fb; try { return JSON.parse(v); } catch { return fb; } };
+const parsed = new Map();
+/** A JSON value from state, parsed once per change (read-only: never mutate what this returns). */
+function parseOnce(key, raw, fallback) {
+  const c = parsed.get(key);
+  if (c && c.raw === raw) return c.v;
+  const v = parse(raw, fallback); parsed.set(key, { raw, v }); return v;
+}
+let net = null, S = { entities: { players: {} }, shared: {} };
+const seenHb = new Map();
+/** Players whose heartbeat moved in the last 3s (plus us), sorted by sessionId. */
+function livePlayers() {
+  const now = performance.now(), out = [];
+  for (const [id, p] of Object.entries(S.entities.players || {})) {
+    const s = seenHb.get(id);
+    if (!s || s.hb !== p.hb) seenHb.set(id, { hb: p.hb, at: now });
+    if (id === net.sessionId || now - seenHb.get(id).at < 3000) out.push(id);
+  }
+  return out.sort();
+}
+const isHost = () => livePlayers()[0] === net.sessionId;
+// The shared clock: the host's Date.now() plus its own offset, learned from `clk` changes.
+const clockSync = { offset: 0, seen: undefined, samples: [], lastWrite: 0 };
+const clock = () => Date.now() + clockSync.offset;
+function syncClock(now) {
+  if (isHost()) { if (now - clockSync.lastWrite > 2000) { clockSync.lastWrite = now; net.setShared("clk", clock()); } return; }
+  const clk = Number(S.shared.clk);
+  if (!clk || clk === clockSync.seen) return;
+  if (clockSync.seen !== undefined) { // the first value we see may be old; later changes are fresh
+    clockSync.samples = [...clockSync.samples.slice(-4), clk - Date.now()];
+    clockSync.offset = Math.max(...clockSync.samples); // the least-delayed sample is the best
+  }
+  clockSync.seen = clk;
+}
+
+// ── TOWER ───────────────────────────────────────────────────────────────────────────
+// The tower is COLS tiles wide. y grows DOWNWARD: the ground is y = 0, 50 m up is y = -50.
+// It's built level by level, upward, as far as anyone looks; level k only depends on the seed.
+const COLS = 14;
+function mulberry32(a) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const levels = [];
+const plat = (k, x, y, w, kind, rnd) => ({ k, x, y, w, kind, phase: rnd ? rnd() * Math.PI * 2 : 0, range: kind === "move" ? 1.4 + (rnd ? rnd() : 0) : 0 });
+/** One level: a platform you can reach from the level below (`main`), sometimes a second one. */
+function makeLevel(k) {
+  if (k === 0) { const g = plat(0, 0, 0, COLS, "ground"); return { k, y: 0, main: g, plats: [g] }; }
+  const prev = levels[k - 1], rnd = mulberry32(CONFIG.seed * 31 + k * 7919), diff = Math.min(1, k / CONFIG.hardAt);
+  let y = prev.y - (2 + rnd() * (1 + diff * 1.2)); // 2 to 4.2 tiles above the last level
+  const ledge = Math.floor(-y / CONFIG.restEvery);
+  if (ledge > Math.floor(-prev.y / CONFIG.restEvery)) { const r = plat(k, 0, -ledge * CONFIG.restEvery, COLS, "rest"); return { k, y: r.y, main: r, plats: [r], rest: ledge * CONFIG.restEvery }; }
+  const from = prev.main, w = Math.max(1.6, 3.4 - diff * 1.6 + rnd() * 0.8), up = prev.y - y;
+  const gap = -0.8 + rnd() * ((up > 3.4 ? 1.6 : 2.6) + 0.8); // edge to edge, sideways (below 0: overlapping)
+  let dir = rnd() < 0.5 ? -1 : 1, x = 0;
+  const place = () => (x = from.w >= COLS ? 0.6 + rnd() * (COLS - 1.2 - w) : dir > 0 ? from.x + from.w + gap : from.x - gap - w);
+  place();
+  if (x < 0.4 || x + w > COLS - 0.4) { dir = -dir; place(); }
+  x = Math.max(0.4, Math.min(COLS - 0.4 - w, x));
+  const kind = k > 25 && rnd() < 0.12 + diff * 0.15 ? "ice" : k > 10 && rnd() < 0.1 + diff * 0.2 ? "move" : "plain";
+  const main = plat(k, x, y, w, kind, rnd), plats = [main];
+  if (rnd() < 0.6 - diff * 0.25) { // a second platform: a spring, a rest spot or a trap
+    const w2 = Math.max(1.4, w - 0.4), x2 = x + w / 2 < COLS / 2 ? x + w + 1.5 + rnd() * (COLS - x - w - 2 - w2) : 0.4 + rnd() * (x - 1.9 - w2);
+    if (x2 >= 0.4 && x2 + w2 <= COLS - 0.4) plats.push(plat(k, x2, y + (rnd() - 0.5) * 1.2, w2, k > 5 && rnd() < 0.25 ? "spring" : k > 15 && rnd() < 0.3 ? "move" : "plain", rnd));
+  }
+  return { k, y, main, plats };
+}
+function levelAt(k) { while (levels.length <= k) levels.push(makeLevel(levels.length)); return levels[k]; }
+/** Every platform with its top between y0 (higher up) and y1 (lower down). */
+function platsBetween(y0, y1) {
+  levelAt(0);
+  while (levels[levels.length - 1].y > y0 - 6) levelAt(levels.length);
+  let lo = 0, hi = levels.length - 1;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (levels[m].y > y1 + 1) lo = m + 1; else hi = m; } // the first level at or above y1
+  const out = [];
+  for (let k = lo; k < levels.length && levels[k].y >= y0 - 1; k++) for (const p of levels[k].plats) if (p.y >= y0 && p.y <= y1) out.push(p);
+  return out;
+}
+/** Where a platform is at clock time t (seconds): sliding ones move side to side. */
+const platX = (p, t) => (p.kind === "move" ? p.x + p.range * Math.sin(t * 1.6 + p.phase) : p.x);
+const platVx = (p, t) => (p.kind === "move" ? p.range * 1.6 * Math.cos(t * 1.6 + p.phase) : 0);
+
+// ── CLIMBERS ────────────────────────────────────────────────────────────────────────
+const HW = 0.32, HH = 0.85; // half width and height of a climber, in tiles (x is the middle, y the feet)
+const newClimber = (x, y, ground) => ({ x, y, vx: 0, vy: 0, f: 1, ground, charge: 0, top: y, plan: null, waitUntil: 0 });
+const anim = (b) => (b.charge > 0 ? 3 : !b.ground ? 2 : Math.abs(b.vx) > 0.6 ? 1 : 0);
+/** One physics step. input = { dir -1|0|1, held (jump held: charging) }. Let go of a charge and you leap.
+ *  Returns "jump", "land", "spring", "wall" or null. t = clock seconds. */
+function stepClimber(b, inp, dt, t) {
+  let ev = null;
+  const dir = inp.dir || 0;
+  if (b.ground) {
+    b.x += platX(b.ground, t) - platX(b.ground, t - dt); // ride a sliding platform
+    const grip = b.ground.kind === "ice" ? CONFIG.iceGrip : 22;
+    if (dir) b.f = dir;
+    if (inp.held) { b.charge = Math.min(1, b.charge + dt / CONFIG.chargeTime); b.vx -= b.vx * Math.min(1, grip * dt); } // crouch and charge
+    else if (b.charge > 0) { // let go: leap, as high as you charged
+      const h = CONFIG.minJump + (CONFIG.maxJump - CONFIG.minJump) * b.charge;
+      b.vy = -Math.sqrt(2 * CONFIG.gravity * h); b.vx = dir * CONFIG.airSpeed + platVx(b.ground, t);
+      b.charge = 0; b.ground = null; b.top = b.y; ev = "jump";
+    } else b.vx += (dir * CONFIG.walk - b.vx) * Math.min(1, grip * dt);
+  } else if (dir) { b.vx += (dir * CONFIG.airSpeed - b.vx) * Math.min(1, CONFIG.airControl * dt); b.f = dir; }
+  b.x += b.vx * dt;
+  if (b.x < HW || b.x > COLS - HW) { // the tower walls: bounce off them in the air
+    const side = b.x < HW ? 1 : -1; b.x = side > 0 ? HW : COLS - HW;
+    if (b.vx * side < 0) { b.vx = b.ground ? 0 : -b.vx * CONFIG.wallBounce; if (!b.ground) ev = ev || "wall"; }
+  }
+  if (b.ground) { // walked off the edge? (you stay on while a bit of you still overlaps it: the same test as landing)
+    if (!overlaps(b, b.ground, t)) { b.ground = null; b.top = b.y; b.vy = 0; b.charge = 0; }
+    else { b.y = b.ground.y; b.vy = 0; }
+  }
+  if (!b.ground) {
+    const prevY = b.y;
+    const vy0 = b.vy; b.vy = Math.min(CONFIG.maxFall, b.vy + CONFIG.gravity * dt);
+    b.y += ((vy0 + b.vy) / 2) * dt; // the average speed over the step: the same arc at any frame rate
+    b.top = Math.min(b.top, b.y);
+    if (b.vy >= 0) for (const p of platsBetween(prevY - 0.01, b.y + 0.01)) { // platforms catch you from above; you jump up through them
+      if (overlaps(b, p, t) && prevY <= p.y + 0.02 && b.y >= p.y) { b.y = p.y; b.vy = 0; b.ground = p; ev = "land"; break; }
+    }
+    if (b.ground && b.ground.kind === "spring") { b.vy = -Math.sqrt(2 * CONFIG.gravity * CONFIG.springJump); b.top = b.y; b.ground = null; ev = "spring"; }
+  }
+  return ev;
+}
+const overlaps = (b, p, t) => { const px = platX(p, t); return b.x + HW - 0.08 > px && b.x - HW + 0.08 < px + p.w; };
+const heightOf = (b) => Math.max(0, -b.y);
+
+// ── BOTS (HOST) ─────────────────────────────────────────────────────────────────────
+const host = { acting: false, bots: new Map(), lastBots: 0, lastLeash: 0, lastSpawn: 0 };
+/** Try a leap in your head: from offset `rel` on platform `from`, charged `charge`, aiming at `target`. Does it land higher? */
+function simLeap(from, rel, t0, charge, dir, target) {
+  const s = newClimber(platX(from, t0) + rel, from.y, from), dt = 1 / 30;
+  s.charge = charge;
+  for (let i = 0; i < 100; i++) {
+    const t = t0 + i * dt, tc = platX(target, t) + target.w / 2;
+    const ev = stepClimber(s, { dir: i === 0 ? dir : Math.abs(tc - s.x) > 0.25 ? Math.sign(tc - s.x) : 0 }, dt, t);
+    if (ev === "spring") return true;
+    if (s.ground && i > 0) return s.ground !== from && s.ground.y < from.y - 0.5;
+    if (s.y > from.y + 1) return false; // falling past where it started
+  }
+  return false;
+}
+/** Pick the next jump: a platform above, where to stand, how long to charge, which way to lean. */
+function planClimb(b, t) {
+  const from = b.ground; if (!from) return null;
+  const cands = platsBetween(from.y - CONFIG.maxJump + 0.3, from.y - 0.8).filter((p) => p !== from)
+    .sort((p, q) => (p.k - q.k) || ((levels[q.k].main === q) - (levels[p.k].main === p)));
+  const fx = platX(from, t);
+  for (const target of cands.slice(0, 4)) {
+    const tc = platX(target, t) + target.w / 2, edge = tc > b.x ? from.w - 0.35 : 0.35;
+    for (const rel of [b.x - fx, tc - fx, edge].map((r) => Math.max(0.3, Math.min(from.w - 0.3, r)))) {
+      const t0 = t + Math.abs(rel - (b.x - fx)) / CONFIG.walk + 0.25;
+      for (const charge of [0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1]) for (const dir of [Math.sign(tc - (fx + rel)) || 1, 0]) {
+        if (simLeap(from, rel, t0 + charge * CONFIG.chargeTime, charge, dir, target)) return { from, rel, charge, dir, target };
+      }
+    }
+  }
+  return null;
+}
+/** The bot brain (also your autopilot in the preview): look, walk to the take-off spot, charge, leap, steer. */
+function botInput(b, t, now) {
+  if (!b.ground) { // in the air: lean toward the target
+    if (!b.plan || !b.plan.leapt) return { dir: 0 };
+    const tc = platX(b.plan.target, t) + b.plan.target.w / 2;
+    return { dir: Math.abs(tc - b.x) > 0.25 ? Math.sign(tc - b.x) : 0 };
+  }
+  if (now < b.waitUntil) return { dir: 0 };
+  if (!b.plan || b.plan.from !== b.ground || b.plan.leapt) { // just landed (even back where it started): think again
+    b.plan = planClimb(b, t);
+    if (!b.plan) { b.waitUntil = now + 500; return { dir: 0 }; }
+    if (Math.random() < CONFIG.botSlip) b.plan.charge = Math.max(0.05, Math.min(1, b.plan.charge + (Math.random() < 0.5 ? -1 : 1) * (0.15 + Math.random() * 0.15)));
+    b.waitUntil = now + 200 + Math.random() * 500; // look before you leap
+    return { dir: 0 };
+  }
+  const p = b.plan, spot = platX(b.ground, t) + p.rel;
+  if (!p.charging) { if (Math.abs(spot - b.x) > 0.12) return { dir: Math.sign(spot - b.x) }; if (Math.abs(b.vx) > 0.3) return { dir: 0 }; p.charging = true; } // get there, stop, then charge
+  if (b.charge < p.charge) return { dir: 0, held: true };
+  p.leapt = true; // letting go now: the leap happens this step
+  return { dir: p.dir };
+}
+function botWire(b) { return { i: b.id, n: b.name, c: b.color, x: +b.x.toFixed(2), y: +b.y.toFixed(2), vx: +b.vx.toFixed(1), vy: +b.vy.toFixed(1), f: b.f, a: anim(b), ch: +b.charge.toFixed(2) }; }
+const botList = () => (host.acting ? [...host.bots.values()].map(botWire) : parseOnce("bots", S.shared.bots, []));
+/** A spot on a platform a few levels below level k (a bot climbing up behind someone). */
+function spotNear(k) {
+  const lv = levelAt(Math.max(0, k - (ATTRACT ? 1 + Math.floor(Math.random() * 3) : 2 + Math.floor(Math.random() * 6)))), p = lv.plats[Math.floor(Math.random() * lv.plats.length)];
+  return { x: p.x + 0.4 + Math.random() * Math.max(0, p.w - 0.8), y: p.y, ground: p };
+}
+const levelOfHeight = (m) => { let k = 0; while (levelAt(k + 1).y >= -m) k++; return k; };
+/** Who the bots stay near: every player's height (in the preview, your autopilot's). */
+const anchors = () => [heightOf(me), ...(ATTRACT ? [] : climbers().filter((c) => !c.bot).map((c) => Math.max(0, -c.y)))];
+function adopt() { // become host: take the bots over exactly where state has them
+  host.acting = true; host.bots.clear();
+  for (const s of parseOnce("bots", S.shared.bots, [])) host.bots.set(s.i, Object.assign(newClimber(s.x, s.y, null), { id: s.i, name: s.n, color: s.c, f: s.f || 1, vx: s.vx || 0, vy: s.vy || 0 }));
+}
+function hostTick(dt, now, t) {
+  if (!host.acting) adopt();
+  const want = Math.max(0, CONFIG.seats - livePlayers().length + (ATTRACT ? 1 : 0));
+  if (host.bots.size < want && now - host.lastSpawn > 600) {
+    host.lastSpawn = now;
+    const used = new Set([...host.bots.values()].map((b) => b.name)), taken = new Set([...climbers().map((c) => c.color), me.color]);
+    const id = "b" + Math.random().toString(36).slice(2, 6), a = anchors(), s = spotNear(levelOfHeight(a[Math.floor(Math.random() * a.length)] || 0) + 4);
+    host.bots.set(id, Object.assign(newClimber(s.x, s.y, s.ground), { id, name: BOT_NAMES.find((n) => !used.has(n)) || "Bot", color: COLORS.find((c) => !taken.has(c)) || "#ccc", waitUntil: now + Math.random() * 800 }));
+  }
+  if (host.bots.size > want) host.bots.delete([...host.bots.keys()].pop());
+  if (now - host.lastLeash > 2000) { // a bot that wandered far from everyone comes back near someone
+    host.lastLeash = now;
+    const a = anchors();
+    for (const b of host.bots.values()) if (a.length && b.ground && Math.min(...a.map((m) => Math.abs(m - heightOf(b)))) > CONFIG.botLeash) {
+      const s = spotNear(levelOfHeight(a[Math.floor(Math.random() * a.length)])); Object.assign(b, newClimber(s.x, s.y, s.ground), { plan: null }); sparkle(b.x, b.y - 0.5, b.color, 14);
+    }
+  }
+  for (const b of host.bots.values()) {
+    const ev = stepClimber(b, botInput(b, t, now), dt, t);
+    if (ev === "land" || ev === "spring") landed(b, false);
+    if (ev === "jump") dust(b.x, b.y, 4);
+  }
+  if (now - host.lastBots > 100) { host.lastBots = now; net.setShared("bots", JSON.stringify([...host.bots.values()].map(botWire))); } // ~10/s
+}
+/** Someone (a bot on the host, or me) just landed: was it a long fall? */
+function landed(b, mine) {
+  const fell = b.y - b.top;
+  dust(b.x, b.y, 6);
+  if (fell >= CONFIG.bigFall) {
+    const m = Math.round(fell);
+    if (mine) { announce(`You fell ${m} m`); toast("Oof!", `You fell ${m} m`); shake = 12; sfx("fall"); net.send("fell", { m, n: myName }); }
+    else { announce(`${b.name} fell ${m} m`); net.send("fell", { m, n: b.name }); }
+  }
+  b.top = b.y;
+}
+
+// ── ME ──────────────────────────────────────────────────────────────────────────────
+const myName = (() => { try { return localStorage.getItem("mpa-name") || ""; } catch { return ""; } })() ||
+  ["Brave", "Bouncy", "Lucky", "Sunny", "Plucky", "Zippy"][Math.floor(Math.random() * 6)] + " " + ["Goat", "Gecko", "Monkey", "Squirrel", "Frog", "Kite"][Math.floor(Math.random() * 6)];
+const me = Object.assign(newClimber(COLS / 2, 0, null), { id: "", color: COLORS[0], best: 0, ledge: 0, lastSend: 0, sent: 0, sentAt: 0, zone: "", auto: ATTRACT });
+const input = { left: false, right: false, held: false };
+let player = null, board = null, shake = 0;
+function startOver() {
+  const g = levelAt(0).main;
+  Object.assign(me, newClimber(2 + Math.random() * (COLS - 4), 0, g), { plan: null, ledge: 0 });
+  $("over").hidden = true;
+}
+function myTick(dt, now, t) {
+  let inp = { dir: (input.right ? 1 : 0) - (input.left ? 1 : 0), held: input.held };
+  if (me.auto) inp = botInput(me, t, now);
+  if (!$("over").hidden) inp = { dir: 0 };
+  const ev = stepClimber(me, inp, dt, t);
+  if (ev === "jump") sfx("jump");
+  if (ev === "wall") sfx("wall");
+  if (ev === "spring") { sfx("spring"); sparkle(me.x, me.y, "#ff5a5f", 10); }
+  if (ev === "land" || ev === "spring") landed(me, true);
+  const h = heightOf(me);
+  me.best = Math.max(me.best, h);
+  const ledge = Math.floor(h / CONFIG.restEvery) * CONFIG.restEvery;
+  if (me.ground && ledge > me.ledge) { // standing on a rest ledge you hadn't reached yet
+    me.ledge = ledge; toast(`${ledge} m!`, zoneAt(ledge).name); sfx("up"); sparkle(me.x, me.y - 1, "#ffe14d", 40);
+    announce(`You reached ${ledge} m`); net.send("up", { m: ledge, n: myName });
+  }
+  if (board && me.best >= me.sent + 5 && now - me.sentAt > 8000) { me.sent = Math.floor(me.best); me.sentAt = now; board.submit(me.sent).catch(() => {}); } // a new personal best
+  if (now - me.lastSend > CONFIG.sendMs) { me.lastSend = now; net.me.set("p", JSON.stringify({ x: +me.x.toFixed(2), y: +me.y.toFixed(2), vx: +me.vx.toFixed(1), vy: +me.vy.toFixed(1), f: me.f, a: anim(me), ch: +me.charge.toFixed(2) })); }
+}
+/** Two people in one color: the one with the higher sessionId picks a free color. */
+function fixColor() {
+  const others = Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId);
+  if (!others.some(([id, p]) => p.c === me.color && id < net.sessionId)) return;
+  const taken = new Set([...others.map(([, p]) => p.c), ...botList().map((b) => b.c)]), free = COLORS.find((c) => !taken.has(c));
+  if (free) { me.color = free; net.me.set("c", free); }
+}
+
+// ── DRAW ────────────────────────────────────────────────────────────────────────────
+const cv = document.getElementById("game"), ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = 1, TS = 40;
+function fit() { DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; }
+addEventListener("resize", fit); addEventListener("orientationchange", fit); fit();
+const cam = { y: -6 };
+const sx = (x) => W / 2 + (x - COLS / 2) * TS, sy = (y) => H / 2 + (y - cam.y) * TS;
+const views = new Map(); // everyone else (people, and bots unless I run them): eased toward their latest state
+/** Everyone climbing but me, as this screen shows them. */
+function climbers() {
+  const out = [...views.values()];
+  if (host.acting) for (const b of host.bots.values()) out.push({ id: b.id, name: b.name, color: b.color, x: b.x, y: b.y, f: b.f, a: anim(b), ch: b.charge, bot: true });
+  return out;
+}
+function syncViews(dt) {
+  const now = performance.now(), k = 1 - Math.pow(0.0005, dt), seen = new Set(), live = new Set(livePlayers()), list = [];
+  for (const [id, p] of Object.entries(S.entities.players || {})) {
+    if (id === me.id || !live.has(id)) continue;
+    const s = parseOnce("p:" + id, p.p, null); if (s) list.push({ id, raw: p.p, s, name: p.n || "Player", color: p.c || "#ccc" });
+  }
+  if (!host.acting) for (const b of parseOnce("bots", S.shared.bots, [])) list.push({ id: b.i, raw: b, s: b, name: b.n, color: b.c, bot: true });
+  for (const o of list) {
+    seen.add(o.id);
+    let v = views.get(o.id);
+    if (!v) { v = { id: o.id, x: o.s.x, y: o.s.y, raw: null }; views.set(o.id, v); }
+    if (o.raw !== v.raw) {
+      Object.assign(v, { tx: o.s.x, ty: o.s.y, vx: o.s.vx || 0, vy: o.s.vy || 0, f: o.s.f || 1, a: o.s.a, ch: o.s.ch || 0, name: o.name, color: o.color, bot: !!o.bot, raw: o.raw, at: now });
+      if (Math.hypot(v.tx - v.x, v.ty - v.y) > 6) { v.x = v.tx; v.y = v.ty; } // brought back somewhere: jump there
+    }
+    const ahead = Math.min(0.1, (now - v.at) / 1000);
+    v.x += (v.tx + v.vx * ahead - v.x) * k; v.y += (v.ty + v.vy * ahead - v.y) * k;
+  }
+  for (const id of views.keys()) if (!seen.has(id)) views.delete(id);
+}
+const parts = [];
+function spray(x, y, n, color, speed, life, size, grav) { for (let i = 0; i < n && parts.length < 400; i++) { const a = Math.random() * Math.PI * 2, s = speed * (0.3 + Math.random() * 0.7); parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - speed * 0.3, life, max: life, color, size, grav }); } }
+const dust = (x, y, n) => spray(x, y - 0.05, n, "#ffffffcc", 2.2, 0.35, 0.1, 4);
+const sparkle = (x, y, color, n) => spray(x, y, n, color, 6, 0.9, 0.16, 8);
+const mix = (a, b, k) => { const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); const A = p(a), B = p(b); return `rgb(${A.map((v, i) => Math.round(v + (B[i] - v) * k)).join(",")})`; };
+/** The zone colors at height m, blended over the 12 m below each zone change. */
+function skyAt(m) {
+  const z = zoneAt(m), i = ZONES.indexOf(z), prev = ZONES[i - 1], k = prev ? Math.min(1, (m - z.from + 12) / 12) : 1;
+  if (k >= 1 || !prev) return z.sky;
+  return [mix(prev.sky[0], z.sky[0], k), mix(prev.sky[1], z.sky[1], k)];
+}
+const STARS = Array.from({ length: 70 }, (_, i) => { const r = mulberry32(i * 131 + 7); return { x: r(), y: r(), s: 0.5 + r() * 1.5 }; });
+const PUFFS = Array.from({ length: 40 }, (_, i) => { const r = mulberry32(i * 557 + 11); return { x: r() * 1.4 - 0.2, y: -r() * 400, s: 0.6 + r() * 1.2 }; });
+function drawBackground(t) {
+  const m = -cam.y, [top, bottom] = skyAt(Math.max(0, m));
+  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, top); g.addColorStop(1, bottom);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const starA = Math.max(0, Math.min(1, (m - 175) / 30));
+  if (starA > 0) { ctx.fillStyle = `rgba(255,255,255,${starA})`; for (const s of STARS) { const y = ((s.y * H + m * TS * 0.05) % H + H) % H; ctx.fillRect(s.x * W, y, s.s, s.s); } }
+  ctx.fillStyle = m > 175 ? "#ffffff10" : "#ffffffb0"; // drifting clouds, slower than the tower: depth
+  for (const c of PUFFS) {
+    const y = H / 2 + (c.y - cam.y * 0.45) * TS * 0.6, x = ((c.x * W + t * 6 * c.s) % (W + 300)) - 150, s = c.s * TS;
+    if (y < -s || y > H + s) continue;
+    for (const [dx, dy, rx, ry] of [[0, 0, 1.4, 0.5], [0.8, -0.25, 0.8, 0.5], [-0.7, -0.15, 0.7, 0.42]]) { ctx.beginPath(); ctx.ellipse(x + dx * s, y + dy * s, rx * s, ry * s, 0, 0, 7); ctx.fill(); }
+  }
+  if (cam.y > -30) { // the meadow far below
+    ctx.fillStyle = "#79c56f"; ctx.beginPath(); ctx.moveTo(0, H);
+    for (let x = 0; x <= W + 20; x += 20) ctx.lineTo(x, sy(-1.5) - Math.sin(x / 120) * TS * 0.8 - Math.sin(x / 47) * TS * 0.25);
+    ctx.lineTo(W, H); ctx.fill();
+  }
+}
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function drawWalls() { // the tower's two side walls, bricks scrolling with the climb
+  const left = sx(0), right = sx(COLS), bw = TS * 1.2, z = zoneAt(Math.max(0, -cam.y));
+  for (const [x0, x1] of [[Math.min(left - bw, 0), left], [right, Math.max(right + bw, W)]]) {
+    ctx.fillStyle = z.wall; ctx.fillRect(x0, 0, x1 - x0, H);
+    ctx.fillStyle = "#00000022";
+    const row = TS * 0.6, off = ((-cam.y * TS) % (row * 2) + row * 2) % (row * 2);
+    for (let y = -row * 2 + off; y < H + row; y += row) { ctx.fillRect(x0, y, x1 - x0, 2); const shift = Math.round((y - off) / row) % 2 ? TS * 0.5 : 0; for (let x = x0 - (x0 % TS) + shift; x < x1; x += TS) if (x >= x0) ctx.fillRect(x, y, 2, row); }
+  }
+  ctx.fillStyle = "#00000033"; ctx.fillRect(left - 4, 0, 4, H); ctx.fillRect(right, 0, 4, H);
+}
+function drawPlatform(p, t) {
+  const x = sx(platX(p, t)), y = sy(p.y), w = p.w * TS, h = TS * 0.48, z = zoneAt(-p.y);
+  if (p.kind === "ground") { ctx.fillStyle = "#8f5b37"; ctx.fillRect(x, y, w, H); ctx.fillStyle = "#5fcf5f"; ctx.fillRect(x, y, w, TS * 0.3); ctx.fillStyle = "#86e276"; ctx.fillRect(x, y, w, TS * 0.1); return; }
+  if (p.kind === "rest") {
+    ctx.fillStyle = "#e9dcc0"; rr(x, y, w, h * 1.2, TS * 0.1); ctx.fill(); ctx.fillStyle = "#c9b48a"; ctx.fillRect(x, y + h * 0.9, w, h * 0.3);
+    ctx.fillStyle = "#6b4a26"; ctx.font = `900 ${Math.round(TS * 0.42)}px system-ui`; ctx.textAlign = "center"; ctx.fillText(`${-p.y} m · ${zoneAt(-p.y).name}`, x + w / 2, y + h * 0.82);
+    return;
+  }
+  if (z.cloud && p.kind !== "ice") { // Cloud Sea: puffy cloud platforms
+    ctx.fillStyle = "#ffffff"; rr(x, y, w, h, h / 2); ctx.fill();
+    for (let k = 0; k < p.w - 0.6; k += 0.9) { ctx.beginPath(); ctx.arc(x + (k + 0.45) * TS, y + h * 0.15, TS * 0.32, Math.PI, 0); ctx.fill(); }
+    ctx.fillStyle = "#f3c6d6"; ctx.fillRect(x + TS * 0.2, y + h * 0.75, w - TS * 0.4, h * 0.2);
+  } else {
+    const body = p.kind === "ice" ? "#bfefff" : p.kind === "move" ? "#c98a4b" : z.plat, lip = p.kind === "ice" ? "#ffffff" : p.kind === "move" ? "#efc07a" : z.top;
+    ctx.fillStyle = body; rr(x, y, w, h, TS * 0.14); ctx.fill();
+    ctx.fillStyle = lip; rr(x, y, w, h * 0.38, TS * 0.12); ctx.fill();
+    if (p.kind === "ice") { ctx.fillStyle = "#ffffffaa"; ctx.fillRect(x + w * 0.15, y + h * 0.55, w * 0.25, 2); ctx.fillRect(x + w * 0.55, y + h * 0.65, w * 0.2, 2); }
+    if (p.kind === "move") { ctx.fillStyle = "#00000044"; for (let k = 0; k < p.w; k++) { ctx.beginPath(); ctx.arc(x + (k + 0.5) * TS, y + h * 0.68, TS * 0.05, 0, 7); ctx.fill(); } }
+  }
+  if (p.kind === "spring") { // a red pad that throws you high
+    const cx = x + w / 2;
+    ctx.strokeStyle = "#e6e9f2"; ctx.lineWidth = Math.max(2, TS * 0.06); ctx.beginPath(); for (let k = 0; k <= 4; k++) ctx.lineTo(cx + (k % 2 ? -1 : 1) * TS * 0.18, y - (TS * 0.32 * k) / 4); ctx.stroke();
+    ctx.fillStyle = "#ff5a5f"; rr(cx - TS * 0.42, y - TS * 0.42, TS * 0.84, TS * 0.14, TS * 0.06); ctx.fill();
+  }
+}
+function drawClimber(c, t) {
+  const charging = c.a === 3, air = c.a === 2, walking = c.a === 1, x = sx(c.x), y = sy(c.y), w = HW * 2 * TS, h = HH * TS;
+  const sq = charging ? 1 - (c.ch || 0) * 0.3 : air ? 1.06 : 1, step = walking ? Math.sin(t * 16 + c.x * 3) * TS * 0.1 : 0;
+  ctx.fillStyle = "#00000030"; ctx.beginPath(); ctx.ellipse(x, y, w * 0.5, TS * 0.05, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = "#2b2140"; for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(x + s * (w * 0.22 - step), y - TS * 0.05, TS * 0.11, TS * 0.07, 0, 0, 7); ctx.fill(); } // feet
+  const bw = w * (2 - sq) * 0.95, bh = h * sq * 0.9;
+  ctx.fillStyle = c.color; rr(x - bw / 2, y - bh - TS * 0.07, bw, bh, TS * 0.18); ctx.fill();
+  if (c.mine) { ctx.strokeStyle = "#ffffff"; ctx.lineWidth = Math.max(2, TS * 0.05); ctx.stroke(); }
+  ctx.fillStyle = "#ffffff38"; rr(x - bw / 2 + TS * 0.06, y - bh - TS * 0.02, bw - TS * 0.12, bh * 0.25, TS * 0.1); ctx.fill();
+  for (const s of [-1, 1]) { // eyes (squeezed shut while charging)
+    const ex = x + c.f * w * 0.14 + s * w * 0.17, ey = y - bh * 0.66 - TS * 0.07;
+    if (charging) { ctx.strokeStyle = "#1b1f3b"; ctx.lineWidth = Math.max(1.5, TS * 0.045); ctx.beginPath(); ctx.moveTo(ex - TS * 0.07, ey); ctx.lineTo(ex + TS * 0.07, ey); ctx.stroke(); continue; }
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ex, ey, TS * 0.09, 0, 7); ctx.fill();
+    ctx.fillStyle = "#1b1f3b"; ctx.beginPath(); ctx.arc(ex + c.f * TS * 0.035, ey + (air ? -TS * 0.03 : 0), TS * 0.045, 0, 7); ctx.fill();
+  }
+  if (charging) { // the charge ring: full = a big leap
+    const k = c.ch || 0;
+    ctx.strokeStyle = "#00000055"; ctx.lineWidth = TS * 0.1; ctx.beginPath(); ctx.arc(x, y - h - TS * 0.45, TS * 0.25, 0, 7); ctx.stroke();
+    ctx.strokeStyle = k >= 1 ? "#ffe14d" : "#7dff9a"; ctx.beginPath(); ctx.arc(x, y - h - TS * 0.45, TS * 0.25, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2); ctx.stroke();
+  } else if (!ATTRACT) {
+    ctx.font = `700 ${Math.max(11, Math.round(TS * 0.3))}px system-ui`; ctx.textAlign = "center"; ctx.lineWidth = 3; ctx.strokeStyle = "#0008";
+    const label = c.mine ? "You" : c.name || "";
+    ctx.strokeText(label, x, y - h - TS * 0.25); ctx.fillStyle = c.mine ? "#ffe14d" : "#fff"; ctx.fillText(label, x, y - h - TS * 0.25);
+  }
+}
+function draw(now, dt, t) {
+  const touch = touchUI && H > W;
+  TS = ATTRACT ? H / 9 : Math.min(W / (COLS + 0.8), H / 13);
+  const bottomPad = touch ? 130 : 30, floorLimit = -(H / 2 - bottomPad) / TS; // never show below the ground
+  const focusY = ATTRACT ? packMiddle() : me.y; // the preview films the middle of the pack
+  const want = Math.min(floorLimit, focusY - (touch ? 1.5 : ATTRACT ? 1 : 2.5));
+  cam.y += (want - cam.y) * Math.min(1, (ATTRACT ? 4 : 5) * dt);
+  shake *= 0.86;
+  ctx.setTransform(DPR, 0, 0, DPR, (Math.random() - 0.5) * shake * DPR, (Math.random() - 0.5) * shake * DPR);
+  drawBackground(t); drawWalls();
+  const y0 = cam.y - H / 2 / TS - 1, y1 = cam.y + H / 2 / TS + 1;
+  for (const p of platsBetween(y0, y1)) drawPlatform(p, t);
+  for (const c of climbers()) drawClimber(c, now / 1000);
+  drawClimber({ ...me, a: anim(me), ch: me.charge, mine: true }, now / 1000);
+  for (const p of parts) { ctx.globalAlpha = Math.min(1, (p.life / p.max) * 2); ctx.fillStyle = p.color; ctx.fillRect(sx(p.x) - (p.size * TS) / 2, sy(p.y) - (p.size * TS) / 2, p.size * TS, p.size * TS); }
+  ctx.globalAlpha = 1;
+}
+function packMiddle() { const ys = [me.y, ...climbers().map((c) => c.y)].sort((a, b) => a - b); return ys[Math.floor(ys.length / 2)]; }
+function tickFx(dt) { for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.life -= dt; p.vy += p.grav * dt; p.x += p.vx * dt; p.y += p.vy * dt; if (p.life <= 0) parts.splice(i, 1); } }
+
+// ── HUD & CARD ──────────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+let reconnecting = false, startedAt = 0, toastTimer = 0;
+function toast(big, small = "", ms = 1800) { if (ATTRACT) return; const m = $("msg"); m.innerHTML = `${esc(big)}${small ? `<small>${esc(small)}</small>` : ""}`; m.classList.add("on"); clearTimeout(toastTimer); toastTimer = setTimeout(() => m.classList.remove("on"), ms); }
+const feed = [];
+function announce(text) { if (ATTRACT) return; feed.unshift({ text, at: performance.now() }); feed.length = Math.min(feed.length, 3); }
+function hud(now) {
+  if (ATTRACT) { for (const id of ["height", "top", "feed", "hint", "net"]) $(id).textContent = ""; return; }
+  const h = heightOf(me);
+  $("height").innerHTML = `${Math.floor(h)} m<small>${esc(zoneAt(h).name)} · best ${Math.floor(me.best)} m</small>`;
+  const rows = climbers().map((c) => ({ n: c.name, m: Math.max(0, -c.y) })).concat([{ n: "You", m: h, me: true }]).sort((a, b) => b.m - a.m);
+  $("top").innerHTML = `<div class="head"><span>Highest now</span></div>` + rows.slice(0, 6).map((r) => `<div class="${r.me ? "me" : ""}"><span>${esc(r.n)}</span><span>${Math.floor(r.m)} m</span></div>`).join("");
+  $("feed").innerHTML = feed.filter((f) => now - f.at < 7000).map((f) => `<div>${esc(f.text)}</div>`).join("");
+  $("hint").textContent = now - startedAt < 14000 ? (touchUI ? "Hold JUMP to charge, let go to leap · ◀ ▶ to walk and aim" : "Hold Space to charge, let go to leap · arrows to walk and aim") : "";
+  const z = zoneAt(h).name; if (z !== me.zone) { if (me.zone) toast(z, "a new part of the tower"); me.zone = z; }
+  const n = livePlayers().length;
+  $("net").textContent = net.offline ? "Offline: playing with bots" : reconnecting ? "Reconnecting…" : `Online · ${n} player${n === 1 ? "" : "s"}${isHost() ? " · you run the bots" : ""}`;
+}
+function openCard() {
+  $("over").hidden = false;
+  $("mine").textContent = `You're at ${Math.floor(heightOf(me))} m. Your best this time: ${Math.floor(me.best)} m.`;
+  const list = $("board");
+  if (!board) { list.innerHTML = "<li>Leaderboards need a connection.</li>"; return; }
+  list.innerHTML = "<li>Loading…</li>";
+  (me.best >= 1 ? board.submit(Math.floor(me.best)).catch(() => null) : Promise.resolve()).then(() => board.top(10)).then(({ entries }) => {
+    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${e.score} m</span></li>`).join("") : "<li>No climbs yet. Set the first.</li>";
+  }).catch(() => { list.innerHTML = "<li>Couldn't load the leaderboard.</li>"; });
+}
+$("trophy").onclick = openCard;
+$("resume").onclick = () => { $("over").hidden = true; };
+$("restart").onclick = startOver;
+let actx = null;
+function sfx(kind) {
+  if (!actx || ATTRACT) return;
+  const [f0, f1, dur, vol, type] = { jump: [300, 650, 0.14, 0.05, "triangle"], spring: [300, 1200, 0.3, 0.07, "triangle"], wall: [220, 160, 0.08, 0.05, "square"], fall: [700, 120, 0.6, 0.07, "sawtooth"], up: [520, 1040, 0.5, 0.08, "triangle"] }[kind];
+  const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur);
+}
+
+// ── INPUT ───────────────────────────────────────────────────────────────────────────
+const touchUI = matchMedia("(pointer: coarse)").matches && !ATTRACT;
+$("padL").hidden = $("padR").hidden = !touchUI;
+document.body.classList.toggle("touch", touchUI);
+const wake = () => { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch {} } };
+const KEYS = { arrowleft: "left", a: "left", arrowright: "right", d: "right" }, JUMPS = [" ", "arrowup", "w", "z"];
+addEventListener("keydown", (e) => {
+  wake(); const k = e.key.toLowerCase();
+  if (KEYS[k]) { e.preventDefault(); input[KEYS[k]] = true; }
+  if (JUMPS.includes(k)) { e.preventDefault(); input.held = true; }
+});
+addEventListener("keyup", (e) => { const k = e.key.toLowerCase(); if (KEYS[k]) input[KEYS[k]] = false; if (JUMPS.includes(k)) input.held = false; });
+addEventListener("blur", () => { input.left = input.right = input.held = false; });
+for (const b of document.querySelectorAll(".pad button")) {
+  const k = b.dataset.k;
+  b.addEventListener("pointerdown", (e) => { e.preventDefault(); wake(); b.setPointerCapture(e.pointerId); if (k === "jump") input.held = true; else input[k] = true; b.classList.add("on"); });
+  for (const ev of ["pointerup", "pointercancel"]) b.addEventListener(ev, () => { if (k === "jump") input.held = false; else input[k] = false; b.classList.remove("on"); });
+}
+cv.addEventListener("pointerdown", wake);
+document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+
+// ── MAIN LOOP ───────────────────────────────────────────────────────────────────────
+let last = performance.now(), lastHb = 0, lastHud = 0;
+function frame(now) {
+  const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; // the first frame can be timed before load: never negative
+  if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); fixColor(); }
+  syncClock(now);
+  const t = clock() / 1000;
+  if (isHost()) hostTick(dt, now, t); else host.acting = false;
+  syncViews(dt);
+  myTick(dt, now, t);
+  tickFx(dt);
+  draw(now, dt, t);
+  if (now - lastHud > 150) { lastHud = now; hud(now); }
+  requestAnimationFrame(frame);
+}
+
+(async function start() {
+  net = await connect();
+  net.onState((st) => { S = st; });
+  net.on("fell", (msg) => { if (msg && msg.n) announce(`${String(msg.n).slice(0, 24)} fell ${Math.round(Number(msg.m) || 0)} m`); });
+  net.on("up", (msg) => { if (msg && msg.n) announce(`${String(msg.n).slice(0, 24)} reached ${Math.round(Number(msg.m) || 0)} m`); });
+  net.onDisconnect(() => { reconnecting = true; $("net").textContent = "Reconnecting…"; });
+  net.onReconnect(() => { reconnecting = false; });
+  if (!net.offline && typeof MP !== "undefined") { player = MP.auth({ key: MP_CONNECT.key, apiUrl: MP_CONNECT.apiUrl }); board = player.leaderboard(CONFIG.board); }
+  const taken = new Set([...Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId).map(([, p]) => p.c), ...parseOnce("bots", S.shared.bots, []).map((b) => b.c)]);
+  me.id = net.sessionId; me.color = COLORS.find((c) => !taken.has(c)) || COLORS[Math.floor(Math.random() * COLORS.length)];
+  net.me.set({ n: myName, c: me.color, hb: Date.now() });
+  startOver();
+  if (ATTRACT) { // the preview starts in the Cloud Sea, with bots all around
+    Object.assign(CONFIG, { botSlip: 0.2, botLeash: 7, seats: 9 });
+    const k = levelOfHeight(100), g = levelAt(k).main; Object.assign(me, newClimber(g.x + g.w * 0.3, g.y, g), { best: 100, ledge: 100 });
+    cam.y = me.y - 2;
+  } else $("trophy").hidden = false;
+  startedAt = performance.now();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

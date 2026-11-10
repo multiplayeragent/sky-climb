@@ -1,0 +1,20 @@
+{
+  "name": "Sky Climb",
+  "genre": "platformer",
+  "dim": "2D",
+  "mode": "Drop-in",
+  "players": "2–20",
+  "hook": "Charge your jumps. Climb forever. Try not to fall.",
+  "how": "Hold jump to charge and let go to leap: the longer you hold, the higher you fly. Climb an endless tower of platforms with everyone else. Miss a jump and you fall until something catches you.",
+  "controls": "Arrow keys or A/D, hold and release Space, or on-screen ◀ ▶ and Jump",
+  "uses": [
+    ["Leaderboard", "The highest anyone has climbed, in meters."],
+    ["Bots", "Bot climbers race up around you until enough people join. The host's browser runs them; if it leaves, the next player takes over."],
+    ["Live sync", "Everyone climbs the same tower, built from one seed, and sees every leap and fall."]
+  ],
+  "ideas": [
+    "Add coins on the platforms and a shop for hats",
+    "Make a wind that blows everyone sideways above 100 m",
+    "Add platforms that crumble a second after you land"
+  ]
+}
