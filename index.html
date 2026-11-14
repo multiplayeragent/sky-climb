@@ -27,7 +27,7 @@
   .card { width: min(360px, 90vw); max-height: 86vh; overflow: auto; padding: 20px; border-radius: 16px; background: #1b2347f2; border: 1px solid #ffffff2a; text-align: center; box-sizing: border-box; }
   .card h2 { margin: 0 0 4px; font-size: 26px; color: #ffe14d; }
   .card h3 { margin: 14px 0 4px; font-size: 13px; color: #9fd8ff; text-align: left; }
-  .card ol { margin: 0; padding-left: 24px; font-size: 14px; text-align: left; } .card li span { float: right; font-variant-numeric: tabular-nums; }
+  .card ol { margin: 0; padding-left: 24px; font-size: 14px; text-align: left; } .card li.note { list-style: none; margin-left: -24px; opacity: .85; } .card li span { float: right; font-variant-numeric: tabular-nums; }
   .row { display: flex; gap: 10px; margin-top: 16px; }
   button.go { flex: 1; min-height: 48px; border: 0; border-radius: 12px; background: #3ddc84; color: #06240f; font: 800 16px system-ui, sans-serif; cursor: pointer; }
   button.go.alt { background: #ffffff22; color: #fff; }
@@ -36,7 +36,7 @@
   .pad button.on { background: #ffffff55; }
   #padL { left: max(14px, env(safe-area-inset-left)); } #padR { right: max(14px, env(safe-area-inset-right)); }
   #padR button { width: 96px; height: 96px; background: #3ddc8455; }
-  @media (max-width: 560px) { #top { font-size: 12px; min-width: 110px; } #top div:nth-child(n+6) { display: none; } #msg { font-size: 38px; } }
+  @media (max-width: 560px) { #top { font-size: 12px; min-width: 110px; } #top div:nth-child(n+6):not(.me) { display: none; } #msg { font-size: 38px; } }
 </style>
 <script src="https://cdn.multiplayeragent.com/sdk/mp.global.js"></script>
 </head>
@@ -54,7 +54,7 @@
 <div id="over" hidden><div class="card">
   <h2>Best climbs</h2>
   <div id="mine"></div>
-  <h3>Highest anyone has climbed</h3><ol id="board"><li>Loading…</li></ol>
+  <h3>Highest anyone has climbed</h3><ol id="board"><li class="note">Loading…</li></ol>
   <div class="row"><button class="go alt" id="restart">Start over</button><button class="go" id="resume">Keep climbing</button></div>
 </div></div>
 <script>
@@ -584,7 +584,7 @@ function hud(now) {
   const h = heightOf(me);
   $("height").innerHTML = `${Math.floor(h)} m<small>${esc(zoneAt(h).name)} · best ${Math.floor(me.best)} m</small>`;
   const rows = climbers().map((c) => ({ n: c.name, m: Math.max(0, -c.y) })).concat([{ n: "You", m: h, me: true }]).sort((a, b) => b.m - a.m);
-  $("top").innerHTML = `<div class="head"><span>Highest now</span></div>` + rows.slice(0, 6).map((r) => `<div class="${r.me ? "me" : ""}"><span>${esc(r.n)}</span><span>${Math.floor(r.m)} m</span></div>`).join("");
+  $("top").innerHTML = `<div class="head"><span>Highest now</span></div>` + rows.filter((r, i) => i < 5 || r.me).map((r) => `<div class="${r.me ? "me" : ""}"><span>${esc(r.n)}</span><span>${Math.floor(r.m)} m</span></div>`).join("");
   $("feed").innerHTML = feed.filter((f) => now - f.at < 7000).map((f) => `<div>${esc(f.text)}</div>`).join("");
   $("hint").textContent = now - startedAt < 14000 ? (touchUI ? "Hold JUMP to charge, let go to leap · ◀ ▶ to walk and aim" : "Hold Space to charge, let go to leap · arrows to walk and aim") : "";
   const z = zoneAt(h).name; if (z !== me.zone) { if (me.zone) toast(z, "a new part of the tower"); me.zone = z; }
@@ -595,11 +595,11 @@ function openCard() {
   $("over").hidden = false;
   $("mine").textContent = `You're at ${Math.floor(heightOf(me))} m. Your best this time: ${Math.floor(me.best)} m.`;
   const list = $("board");
-  if (!board) { list.innerHTML = "<li>Leaderboards need a connection.</li>"; return; }
-  list.innerHTML = "<li>Loading…</li>";
+  if (!board) { list.innerHTML = "<li class=\"note\">Leaderboards need a connection.</li>"; return; }
+  list.innerHTML = "<li class=\"note\">Loading…</li>";
   (me.best >= 1 ? board.submit(Math.floor(me.best)).catch(() => null) : Promise.resolve()).then(() => board.top(10)).then(({ entries }) => {
-    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${e.score} m</span></li>`).join("") : "<li>No climbs yet. Set the first.</li>";
-  }).catch(() => { list.innerHTML = "<li>Couldn't load the leaderboard.</li>"; });
+    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${e.score} m</span></li>`).join("") : "<li class=\"note\">No climbs yet. Set the first.</li>";
+  }).catch(() => { list.innerHTML = "<li class=\"note\">Couldn't load the leaderboard.</li>"; });
 }
 $("trophy").onclick = openCard;
 $("resume").onclick = () => { $("over").hidden = true; };
@@ -629,7 +629,7 @@ addEventListener("keyup", (e) => { const k = e.key.toLowerCase(); if (KEYS[k]) i
 addEventListener("blur", () => { input.left = input.right = input.held = false; });
 for (const b of document.querySelectorAll(".pad button")) {
   const k = b.dataset.k;
-  b.addEventListener("pointerdown", (e) => { e.preventDefault(); wake(); b.setPointerCapture(e.pointerId); if (k === "jump") input.held = true; else input[k] = true; b.classList.add("on"); });
+  b.addEventListener("pointerdown", (e) => { e.preventDefault(); wake(); if (k === "jump") input.held = true; else input[k] = true; try { b.setPointerCapture(e.pointerId); } catch {} b.classList.add("on"); });
   for (const ev of ["pointerup", "pointercancel"]) b.addEventListener(ev, () => { if (k === "jump") input.held = false; else input[k] = false; b.classList.remove("on"); });
 }
 cv.addEventListener("pointerdown", wake);
